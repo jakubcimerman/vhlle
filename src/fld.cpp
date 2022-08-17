@@ -690,10 +690,11 @@ void Fluid::outputSurface(double tau) {
  eps_p = txxyy_num / txxyy_den ;
  faniz << setw(12) << tau << setw(14) << vt_num / vt_den << setw(14)
            << vxvy_num / vxvy_den << setw(14) << pi0x_num / pi0x_den << endl;
- cout << setw(10) << tau << setw(13) << E << setw(13) << Efull << setw(13)
+ /*cout << setw(10) << tau << setw(13) << E << setw(13) << Efull << setw(13)
       << Nb1 << setw(13) << S << setw(13) << EtotSurf
       << setw(10) << nelements << setw(10) << nsusp
-      << setw(13) << (float)(nCoreCutCells) / (float)(nCoreCells) << endl;
+      << setw(13) << (float)(nCoreCutCells) / (float)(nCoreCells) << endl;*/
+ cout << setw(13) << E;
  //-- Cornelius: all done, let's free memory
  for (int i1 = 0; i1 < 2; i1++) {
   for (int i2 = 0; i2 < 2; i2++) {

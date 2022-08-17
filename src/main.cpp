@@ -409,6 +409,7 @@ int main(int argc, char **argv) {
  mh->getEnergyDensity();
 
  do {
+  cout << setw(10) << h_p->getTau();
   mh->performStep();
   f_p->outputGnuplot(h_p->getTau());
   f_t->outputGnuplot(h_t->getTau());
@@ -416,10 +417,11 @@ int main(int argc, char **argv) {
   f_p->outputSurface(h_p->getTau());
   f_t->outputSurface(h_t->getTau());
   f_f->outputSurface(h_f->getTau());
+  cout << endl;
   mh->findFreezeout(eosH);
-  cout << "step done, tau=" << h_p->getTau() << endl;
+  //cout << "step done, tau=" << h_p->getTau() << endl;
   if (0.1*f_p->getDz()*h_p->getTau() > h_p->getDtau()) {
-   cout << "grid resize" << endl;
+   //cout << "grid resize" << endl;
    f_p = expandGrid2x(h_p, eos, eosH, trcoeff);
    f_t = expandGrid2x(h_t, eos, eosH, trcoeff);
    f_f = expandGrid2x(h_f, eos, eosH, trcoeff);

@@ -901,10 +901,10 @@ void MultiHydro::findFreezeout(EoS* eosH)
     }
  }
 
- cout << setw(10) << h_p->getTau() << setw(10) << nelements << "\t" << ne_pos << "\t"
+ /*cout << setw(10) << h_p->getTau() << setw(10) << nelements << "\t" << ne_pos << "\t"
       << EtotSurf[0] << "\t" << EtotSurf_positive[0] << "\t" << EtotSurf_negative[0] << "\t"
       << EtotSurf[1] << "\t" << EtotSurf_positive[1] << "\t" << EtotSurf_negative[1] << "\t"
-      << EtotSurf[2] << "\t" << EtotSurf_positive[2] << "\t" << EtotSurf_negative[2] << endl;
+      << EtotSurf[2] << "\t" << EtotSurf_positive[2] << "\t" << EtotSurf_negative[2] << endl;*/
  swap(eos, eosH); // get back to the hydrodynamic EoS
  for (int i1 = 0; i1 < 2; i1++) {
   for (int i2 = 0; i2 < 2; i2++) {

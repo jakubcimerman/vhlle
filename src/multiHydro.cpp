@@ -1,6 +1,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <iomanip>
 #include <TMatrixDEigen.h>
 #include <TMatrixD.h>
 #include <TLorentzVector.h>
@@ -751,10 +752,12 @@ void MultiHydro::findFreezeout(EoS* eosH)
       v2C = 0.99;
      }
      double etaC = f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3);
+     #ifndef CARTESIAN
      transformToLab(etaC, vxC, vyC, vzC);  // viC is now in lab.frame!
      transformToLab(etaC, vxp, vyp, vzp);
      transformToLab(etaC, vxt, vyt, vzt);
      transformToLab(etaC, vxf, vyf, vzf);
+     #endif
      double gammaC = 1. / sqrt(1. - vxC * vxC - vyC * vyC - vzC * vzC);
      double gammaC_p = 1. / sqrt(1. - vxp * vxp - vyp * vyp - vzp * vzp);
      double gammaC_t = 1. / sqrt(1. - vxt * vxt - vyt * vyt - vzt * vzt);
@@ -763,8 +766,9 @@ void MultiHydro::findFreezeout(EoS* eosH)
      double uC_p[4] = {gammaC_p, gammaC_p * vxp, gammaC_p * vyp, gammaC_p * vzp};
      double uC_t[4] = {gammaC_t, gammaC_t * vxt, gammaC_t * vyt, gammaC_t * vzt};
      double uC_f[4] = {gammaC_f, gammaC_f * vxf, gammaC_f * vyf, gammaC_f * vzf};
-     const double tauC = h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0);
      double dsigma[4], dsds;
+     #ifndef CARTESIAN
+     const double tauC = h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0);
      // ---- transform dsigma to lab.frame :
      const double ch = cosh(etaC);
      const double sh = sinh(etaC);
@@ -774,6 +778,10 @@ void MultiHydro::findFreezeout(EoS* eosH)
                          ch / tauC * cornelius->get_normal_elem(0, 3));
      dsigma[1] = tauC * cornelius->get_normal_elem(0, 1);
      dsigma[2] = tauC * cornelius->get_normal_elem(0, 2);
+     #else
+     const double tauC = h_p->time() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0);
+     for(int ii=0; ii<4; ii++) dsigma[ii] = cornelius->get_normal_elem(0, ii);
+     #endif
      dsds = dsigma[0]*dsigma[0] - dsigma[1]*dsigma[1] - dsigma[2]*dsigma[2] - dsigma[3]*dsigma[3];
      double dVEff_p = 0.0, dVEff_t = 0.0, dVEff_f = 0.0, dVEff = 0.0;
      for (int ii = 0; ii < 4; ii++) {
@@ -790,6 +798,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
 
      double picart[10];
 #ifdef OUTPI
+     #ifndef CARTESIAN
      /*pi00*/ picart[index44(0, 0)] = ch * ch * piC[index44(0, 0)] +
                                       2. * ch * sh * piC[index44(0, 3)] +
                                       sh * sh * piC[index44(3, 3)];
@@ -810,6 +819,11 @@ void MultiHydro::findFreezeout(EoS* eosH)
      /*pi33*/ picart[index44(3, 3)] = sh * sh * piC[index44(0, 0)] +
                                       ch * ch * piC[index44(3, 3)] +
                                       2. * sh * ch * piC[index44(0, 3)];
+     #else
+     for(int ii=0; ii<4; ii++)
+      for(int jj=0; jj<ii; jj++)
+       picart[index44(ii, jj)] = piC[index44(ii, jj)];
+     #endif
 #endif
 
      double dEtotSurf[3] = {0., 0., 0.};
@@ -832,7 +846,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
       if (dsigma[0] > 0) {
        printFreezeout(
         fmhfreeze_p,
-        h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        tauC,
         f_p->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
         f_p->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -840,7 +854,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
        );
        printFreezeout(
         fmhfreeze_t,
-        h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        tauC,
         f_t->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
         f_t->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -848,7 +862,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
        );
        printFreezeout(
         fmhfreeze_f,
-        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        tauC,
         f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
         f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -856,7 +870,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
        );
        printFreezeout(
         fmhfreeze_all,
-        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        tauC,
         f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
         f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -866,7 +880,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
      } else {
       if (dEtotSurf[0] > 0 && dVEff_p > param_T * sqrt(-dsds)) printFreezeout(
        fmhfreeze_p,
-       h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+       tauC,
        f_p->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_p->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -874,7 +888,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
       );
       if (dEtotSurf[1] > 0 && dVEff_t > param_T * sqrt(-dsds)) printFreezeout(
        fmhfreeze_t,
-       h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+       tauC,
        f_t->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_t->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -882,7 +896,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
       );
       if (dEtotSurf[2] > 0 && dVEff_f > param_T * sqrt(-dsds)) printFreezeout(
        fmhfreeze_f,
-       h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+       tauC,
        f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -890,7 +904,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
       );
       if (dEtotSurf[2] > 0 && dVEff > param_T * sqrt(-dsds)) printFreezeout(
         fmhfreeze_all,
-        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        tauC,
         f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
         f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
@@ -900,8 +914,12 @@ void MultiHydro::findFreezeout(EoS* eosH)
 
     }
  }
-
- cout << setw(10) << h_p->getTau() << setw(10) << nelements << "\t" << ne_pos << "\t"
+ #ifdef CARTESIAN
+ const double ctime = h_p->time();
+ #else
+ const double ctime = h_p->getTau();
+ #endif
+ cout << setw(10) << ctime << setw(10) << nelements << "\t" << ne_pos << "\t"
       << EtotSurf[0] << "\t" << EtotSurf_positive[0] << "\t" << EtotSurf_negative[0] << "\t"
       << EtotSurf[1] << "\t" << EtotSurf_positive[1] << "\t" << EtotSurf_negative[1] << "\t"
       << EtotSurf[2] << "\t" << EtotSurf_positive[2] << "\t" << EtotSurf_negative[2] << endl;
@@ -916,7 +934,7 @@ void MultiHydro::findFreezeout(EoS* eosH)
   delete[] ccube[i1];
  }
  delete[] ccube;
- if (nelements == 0 && h_p->getTau() > 5) exit(0);
+ if (nelements == 0 && ctime > 5) exit(0);
 }
 
 void MultiHydro::printFreezeout(std::ofstream &fout, double t, double x, double y, double z, double dsigma[4], double uC[4], double TC, double mub, double muq, double mus, double picart[10], double PiC, double dVEff)

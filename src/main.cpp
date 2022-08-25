@@ -408,24 +408,32 @@ int main(int argc, char **argv) {
  f_f->outputCorona(tau0);
  mh->getEnergyDensity();
 
+ double ctime; // current time, tau or t depending on the coordinate frame
  do {
   mh->performStep();
-  f_p->outputGnuplot(h_p->getTau());
-  f_t->outputGnuplot(h_t->getTau());
-  f_f->outputGnuplot(h_t->getTau());
-  f_p->outputSurface(h_p->getTau());
-  f_t->outputSurface(h_t->getTau());
-  f_f->outputSurface(h_f->getTau());
+  #ifdef CARTESIAN
+  ctime = h_p->time();
+  #else
+  ctime = h_p->getTau();
+  #endif
+  f_p->outputGnuplot(ctime);
+  f_t->outputGnuplot(ctime);
+  f_f->outputGnuplot(ctime);
+  f_p->outputSurface(ctime);
+  f_t->outputSurface(ctime);
+  f_f->outputSurface(ctime);
   mh->findFreezeout(eosH);
-  cout << "step done, tau=" << h_p->getTau() << endl;
-  if (0.1*f_p->getDz()*h_p->getTau() > h_p->getDtau()) {
+  cout << "step done, time=" << ctime << endl;
+  #ifndef CARTESIAN
+  if (0.1*f_p->getDz()*h_p->getTau() > h_p->getDtau()) { // TODO Cartesian
    cout << "grid resize" << endl;
    f_p = expandGrid2x(h_p, eos, eosH, trcoeff);
    f_t = expandGrid2x(h_t, eos, eosH, trcoeff);
    f_f = expandGrid2x(h_f, eos, eosH, trcoeff);
    mh->setFluids(f_p, f_t, f_f, h_p, h_t, h_f);
   }
- } while(h_p->getTau() < tauMax+0.0001);
+  #endif
+ } while(ctime < tauMax+0.0001);
 
  /*bool resized = false; // flag if the grid has been resized
  do {

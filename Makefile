@@ -7,7 +7,7 @@ CXXFLAGS      = -Wall -fPIC -O3
 LD            = g++
 LDFLAGS       = -O3
 
-CXXFLAGS     += $(ROOTCFLAGS)
+CXXFLAGS     += $(ROOTCFLAGS) -D CARTESIAN
 LIBS          = $(ROOTLIBS) $(SYSLIBS)
 
 vpath %.cpp src
@@ -17,7 +17,7 @@ SRC        = cll.cpp eos.cpp eo3.cpp eo1.cpp eoChiral.cpp eoHadron.cpp eoAZH.cpp
              icGlauber.cpp icGubser.cpp icGlissando.cpp icTrento.cpp multiHydro.cpp xsect.cpp
 OBJS       = $(patsubst %.cpp,$(objdir)/%.o,$(SRC))
 
-TARGET	   = hlle_visc
+TARGET	   = hlle.cartesian
 #------------------------------------------------------------------------------
 $(TARGET):       $(OBJS)
 		$(LD)  $(LDFLAGS) $^ -o $@ $(LIBS)

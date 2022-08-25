@@ -144,7 +144,11 @@ IC3F::IC3F(Fluid *f_p, Fluid *f_t, double tau, int _nevents, double _snn, double
   z = z / gamma + z0_proj;
   double eta = asinh(z * cosh(rap_beam) / tau0 - sinh(rap_beam)) + rap_beam;
   int charge = i < projZ * nevents ? 1 : 0;
+  #ifdef CARTESIAN
+  makeSmoothPart(x, y, z, charge, rap_beam, true);
+  #else
   makeSmoothPart(x, y, eta, charge, rap_beam, true);
+  #endif
   //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
  }
 
@@ -163,7 +167,11 @@ IC3F::IC3F(Fluid *f_p, Fluid *f_t, double tau, int _nevents, double _snn, double
   z = z / gamma + z0_targ;
   double eta = asinh(z * cosh(rap_beam) / tau0 + sinh(rap_beam)) - rap_beam;
   int charge = i < targZ ? 1 : 0;
+  #ifdef CARTESIAN
+  makeSmoothPart(x, y, z, charge, -rap_beam, false);
+  #else
   makeSmoothPart(x, y, eta, charge, -rap_beam, false);
+  #endif
   //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
  }
  //fout.close();
@@ -206,6 +214,11 @@ void IC3F::makeSmoothPart(double x, double y, double eta, int Charge, double rap
  int izc = (int)round((eta - zmin) / dz);
  double m = nucleon_mass;
  double norm_gauss = 0.0;
+ #ifdef CARTESIAN
+ const double z_factor = cosh(rap) * cosh(rap);
+ #else
+ const double z_factor = tau0 * tau0 * cosh(eta) * cosh(eta) * cosh(rap) * cosh(rap);
+ #endif
  for (int ix = ixc - nsmoothx; ix < ixc + nsmoothx + 1; ix++)
   for (int iy = iyc - nsmoothy; iy < iyc + nsmoothy + 1; iy++)
    for (int iz = izc - nsmoothz; iz < izc + nsmoothz + 1; iz++)
@@ -215,8 +228,7 @@ void IC3F::makeSmoothPart(double x, double y, double eta, int Charge, double rap
      const double zdiff = eta - (zmin + iz * dz);
      norm_gauss +=
          exp(-xdiff * xdiff / 2 / Rgx / Rgx - ydiff * ydiff / 2 / Rgy / Rgy -
-             zdiff * zdiff / 2 / Rgz / Rgz * tau0 * tau0 * cosh(eta) * cosh(eta) *
-                 cosh(rap) * cosh(rap));
+             zdiff * zdiff / 2 / Rgz / Rgz * z_factor);
     }
 
  for (int ix = ixc - nsmoothx; ix < ixc + nsmoothx + 1; ix++)
@@ -229,19 +241,23 @@ void IC3F::makeSmoothPart(double x, double y, double eta, int Charge, double rap
      double weight;
       weight = 1.0 / norm_gauss *
           exp(-xdiff * xdiff / 2 / Rgx / Rgx - ydiff * ydiff / 2 / Rgy / Rgy -
-             zdiff * zdiff / 2 / Rgz / Rgz * tau0 * tau0 * cosh(eta) * cosh(eta) *
-                 cosh(rap) * cosh(rap));
+             zdiff * zdiff / 2 / Rgz / Rgz * z_factor);
      if (weight != weight || fabs(weight) > DBL_MAX) {
       weight = 0.0;
      }
+     #ifdef CARTESIAN
+     const double relative_rapidity = rap;
+     #else
+     const double relative_rapidity = rap - eta + zdiff;
+     #endif
      if (isProjectile) {
-      T00_p[ix][iy][iz] += weight * m * cosh(rap - eta + zdiff);
-      T0z_p[ix][iy][iz] += weight * m * sinh(rap - eta + zdiff);
+      T00_p[ix][iy][iz] += weight * m * cosh(relative_rapidity);
+      T0z_p[ix][iy][iz] += weight * m * sinh(relative_rapidity);
       QB_p[ix][iy][iz] += weight;
       QE_p[ix][iy][iz] += Charge * weight;
      } else {
-      T00_t[ix][iy][iz] += weight * m * cosh(rap - eta + zdiff);
-      T0z_t[ix][iy][iz] += weight * m * sinh(rap - eta + zdiff);
+      T00_t[ix][iy][iz] += weight * m * cosh(relative_rapidity);
+      T0z_t[ix][iy][iz] += weight * m * sinh(relative_rapidity);
       QB_t[ix][iy][iz] += weight;
       QE_t[ix][iy][iz] += Charge * weight;
      }

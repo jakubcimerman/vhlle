@@ -54,10 +54,16 @@ Hydro::Hydro(Fluid *_f, EoS *_eos, TransportCoeff *_trcoeff, double _t0,
  trcoeff = _trcoeff;
  f = _f;
  dt = _dt;
+#ifdef CARTESIAN
+ t = _t0;
+ tau = 1.0;
+#else
  tau = _t0;
+#endif
 }
 
 Hydro::~Hydro() {}
+
 
 void Hydro::setDtau(double deltaTau) {
  dt = deltaTau;
@@ -79,7 +85,7 @@ void Hydro::hlle_flux(Cell *left, Cell *right, int direction, int mode) {
  double U1l, U2l, U3l, U4l, Ubl, Uql, Usl, U1r, U2r, U3r, U4r, Ubr, Uqr, Usr;
  double flux[7];
  const double dta = mode == 0 ? dt / 2. : dt;
- double tauFactor;  // fluxes are also multiplied by tau
+ double tauFactor = 1.0;  // fluxes are also multiplied by tau
  if (mode == PREDICT) {
   // get primitive quantities from Q_{i+} at previous timestep
   left->getPrimVarRight(eos, tau, el, pl, nbl, nql, nsl, vxl, vyl, vzl,
@@ -89,7 +95,9 @@ void Hydro::hlle_flux(Cell *left, Cell *right, int direction, int mode) {
                         direction);
   El = (el + pl) / (1 - vxl * vxl - vyl * vyl - vzl * vzl);
   Er = (er + pr) / (1 - vxr * vxr - vyr * vyr - vzr * vzr);
+  #ifndef CARTESIAN
   tauFactor = tau + 0.25 * dt;
+  #endif
  } else {
   // use half-step updated Q's for corrector step
   left->getPrimVarHRight(eos, tau, el, pl, nbl, nql, nsl, vxl, vyl, vzl,
@@ -98,7 +106,9 @@ void Hydro::hlle_flux(Cell *left, Cell *right, int direction, int mode) {
                          direction);
   El = (el + pl) / (1 - vxl * vxl - vyl * vyl - vzl * vzl);
   Er = (er + pr) / (1 - vxr * vxr - vyr * vyr - vzr * vzr);
+  #ifndef CARTESIAN
   tauFactor = tau + 0.5 * dt;
+  #endif
  }
 
  if (el < 0.) {
@@ -301,6 +311,9 @@ void Hydro::hlle_flux(Cell *left, Cell *right, int direction, int mode) {
 
 void Hydro::source(double tau1, double x, double y, double z, double Q[7],
                    double S[7]) {
+#ifdef CARTESIAN
+ for (int i = 0; i < 7; i++) S[i] = 0.0;
+#else
  double _Q[7], e, p, nb, nq, ns, vx, vy, vz;
  for (int i = 0; i < 7; i++) _Q[i] = Q[i] / tau1;  // no tau factor in  _Q
  transformPV(eos, _Q, e, p, nb, nq, ns, vx, vy, vz);
@@ -311,6 +324,7 @@ void Hydro::source(double tau1, double x, double y, double z, double Q[7],
  S[NB_] = 0.;
  S[NQ_] = 0.;
  S[NS_] = 0.;
+#endif
 }
 
 void Hydro::source_step(int ix, int iy, int iz, int mode) {
@@ -354,7 +368,7 @@ void Hydro::visc_source_step(int ix, int iy, int iz) {
 
  Cell *c = f->getCell(ix, iy, iz);
 
- c->getPrimVarHCenter(eos, tau - dt / 2., e, p, nb, nq, ns, vx, vy, vz);
+ c->getPrimVarHCenter(eos, tau - dt / 2., e, p, nb, nq, ns, vx, vy, vz);  // TODO Cartesian
  if (e <= 0.) return;
  uuu[0] = 1. / sqrt(1. - vx * vx - vy * vy - vz * vz);
  uuu[1] = uuu[0] * vx;
@@ -970,7 +984,9 @@ void Hydro::performStep(void) {
   for (int iz = 0; iz < f->getNZ(); iz++)
    for (int ix = 0; ix < f->getNX(); ix++) {
     Cell *c = f->getCell(ix, iy, iz);
+    #ifndef CARTESIAN
     source_step(ix, iy, iz, PREDICT);
+    #endif
     c->updateQtoQhByFlux();
     c->clearFlux();
    }
@@ -1004,11 +1020,17 @@ void Hydro::performStep(void) {
   for (int iz = 0; iz < f->getNZ(); iz++)
    for (int ix = 0; ix < f->getNX(); ix++) {
     Cell *c = f->getCell(ix, iy, iz);
+    #ifndef CARTESIAN
     source_step(ix, iy, iz, CORRECT);
+    #endif
     c->updateByFlux();
     c->clearFlux();
    }
+ #ifdef CARTESIAN
+ t += dt;
+ #else
  tau += dt;
+ #endif
  f->correctImagCells();
 
  //===== viscous part ======
@@ -1039,7 +1061,9 @@ void Hydro::performStep(void) {
   for (int iy = 0; iy < f->getNY(); iy++)
    for (int iz = 0; iz < f->getNZ(); iz++)
     for (int ix = 0; ix < f->getNX(); ix++) {
+     #ifndef CARTESIAN
      visc_source_step(ix, iy, iz);
+     #endif
      f->getCell(ix, iy, iz)->updateByViscFlux();
      f->getCell(ix, iy, iz)->clearFlux();
     }

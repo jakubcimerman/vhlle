@@ -127,14 +127,21 @@ void MultiHydro::setFluids(Fluid *_f_p, Fluid *_f_t, Fluid *_f_f, Hydro *_h_p,
 
 void MultiHydro::initOutput(const char *dir) {
  string outfreeze_p = dir, outfreeze_f = dir, outfreeze_t = dir, outfreeze_all = dir;
+ string outbeta_p = dir, outbeta_t = dir, outbeta_f = dir;
  outfreeze_p.append("/freezeout_p.dat");
  outfreeze_t.append("/freezeout_t.dat");
  outfreeze_f.append("/freezeout_f.dat");
  outfreeze_all.append("/freezeout_all.dat");
+ outbeta_p.append("/beta_p.dat");
+ outbeta_t.append("/beta_t.dat");
+ outbeta_f.append("/beta_f.dat");
  fmhfreeze_p.open(outfreeze_p.c_str());
  fmhfreeze_t.open(outfreeze_t.c_str());
  fmhfreeze_f.open(outfreeze_f.c_str());
  fmhfreeze_all.open(outfreeze_all.c_str());
+ fmhbeta_p.open(outbeta_p.c_str());
+ fmhbeta_t.open(outbeta_t.c_str());
+ fmhbeta_f.open(outbeta_f.c_str());
 }
 
 void MultiHydro::performStep()
@@ -605,6 +612,7 @@ int MultiHydro::findFreezeout(EoS* eosH)
     double piSquare_p[2][2][2][10], PiSquare_p[2][2][2];
     double piSquare_t[2][2][2][10], PiSquare_t[2][2][2];
     double piSquare_f[2][2][2][10], PiSquare_f[2][2][2];
+    double dbetaSq_p [2][2][2][4][4], dbetaSq_t [2][2][2][4][4], dbetaSq_f [2][2][2][4][4];
 
     // fill all corner cell with energy-momentum tensor
     for (int jx = 0; jx < 2; jx++)
@@ -648,6 +656,12 @@ int MultiHydro::findFreezeout(EoS* eosH)
          piSquare_t[jx][jy][jz][index44(ii, jj)] = cc_t->getpi(ii, jj);
          piSquare_f[jx][jy][jz][index44(ii, jj)] = cc_f->getpi(ii, jj);
        }
+         for (int i=0; i<4; i++)
+          for (int j=0; j<4; j++) {
+           dbetaSq_p[jx][jy][jz][i][j] = cc_p->getDbeta(i,j);
+           dbetaSq_t[jx][jy][jz][i][j] = cc_t->getDbeta(i,j);
+           dbetaSq_f[jx][jy][jz][i][j] = cc_f->getDbeta(i,j);
+          }
        PiSquare_p[jx][jy][jz] = cc_p->getPi();
        PiSquare_t[jx][jy][jz] = cc_t->getPi();
        PiSquare_f[jx][jy][jz] = cc_f->getPi();
@@ -679,6 +693,8 @@ int MultiHydro::findFreezeout(EoS* eosH)
       piC_t[ii] = 0.0;
       piC_f[ii] = 0.0;
      }
+     double dbetaC_p[4][4] = {0.}, dbetaC_t[4][4] = {0.}, dbetaC_f[4][4] = {0.};
+
      double wCenT[2] = {1. - cornelius->get_centroid_elem(isegm, 0) / h_p->getDtau(),
                         cornelius->get_centroid_elem(isegm, 0) / h_p->getDtau()};
      double wCenX[2] = {1. - cornelius->get_centroid_elem(isegm, 1) / dx,
@@ -776,6 +792,12 @@ int MultiHydro::findFreezeout(EoS* eosH)
         PiC_p += PiSquare_p[jx][jy][jz] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
         PiC_t += PiSquare_t[jx][jy][jz] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
         PiC_f += PiSquare_f[jx][jy][jz] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
+        for(int i=0; i<4; i++)
+         for(int j=0; j<4; j++) {
+          dbetaC_p[i][j] += dbetaSq_p[jx][jy][jz][i][j] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
+          dbetaC_t[i][j] += dbetaSq_t[jx][jy][jz][i][j] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
+          dbetaC_f[i][j] += dbetaSq_f[jx][jy][jz][i][j] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
+         }
        }
      double v2C = vxC * vxC + vyC * vyC + vzC * vzC;
      if (v2C > 1.) {
@@ -890,6 +912,23 @@ int MultiHydro::findFreezeout(EoS* eosH)
                                       ch * ch * piC_f[index44(3, 3)] +
                                       2. * sh * ch * piC_f[index44(0, 3)];
 #endif
+     const double gmumu[4] = {1., -1., -1., -1.};
+     const double jacob [4][4] =
+          {{ch, 0., 0., -sh}, {0., 1., 0., 0.}, {0., 0., 1., 0.},
+           {-sh, 0., 0., ch}}; // Jacobian to transform covariant (lower index)
+           // vector from Milne to Cartesian coordinate system
+     double dbetaCart_p [4][4] = {0}, dbetaCart_t [4][4] = {0}, dbetaCart_f [4][4] = {0};
+     for(int i=0; i<4; i++)
+      for(int j=0; j<4; j++)
+       for(int k=0; k<4; k++)
+        for(int l=0; l<4; l++) {
+         dbetaCart_p [i][j] += jacob[i][k] * jacob[j][l] * dbetaC_p[k][l]
+                               * gmumu[l]; // which equals to d_i beta_j
+         dbetaCart_t [i][j] += jacob[i][k] * jacob[j][l] * dbetaC_t[k][l]
+                               * gmumu[l]; // which equals to d_i beta_j
+         dbetaCart_f [i][j] += jacob[i][k] * jacob[j][l] * dbetaC_f[k][l]
+                               * gmumu[l]; // which equals to d_i beta_j
+        }
 
      double dEtotSurf[3] = {0., 0., 0.};
      dEtotSurf[0] = (ep + pCp) * uC_p[0] * dVEff_p - pCp * dsigma[0]; // projectile
@@ -916,6 +955,14 @@ int MultiHydro::findFreezeout(EoS* eosH)
         f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
         dsigma, uC_p, TCp, mubCp, muqCp, musCp, picart_p, PiC_p, dVEff_p
        );
+       printBeta(
+        fmhbeta_p,
+        h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_p->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_p->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_p, TCp, mubCp, muqCp, musCp, dbetaCart_p
+        );
        printFreezeout(
         fmhfreeze_t,
         h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
@@ -924,6 +971,14 @@ int MultiHydro::findFreezeout(EoS* eosH)
         f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
         dsigma, uC_t, TCt, mubCt, muqCt, musCt, picart_t, PiC_t, dVEff_t
        );
+       printBeta(
+        fmhbeta_t,
+        h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_t->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_t->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_t, TCt, mubCt, muqCt, musCt, dbetaCart_t
+       );
        printFreezeout(
         fmhfreeze_f,
         h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
@@ -931,6 +986,14 @@ int MultiHydro::findFreezeout(EoS* eosH)
         f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
         f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
         dsigma, uC_f, TCf, mubCf, muqCf, musCf, picart_f, PiC_f, dVEff_f
+       );
+       printBeta(
+        fmhbeta_f,
+        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_f, TCf, mubCf, muqCf, musCf, dbetaCart_f
        );
        /*printFreezeout(
         fmhfreeze_all,
@@ -942,30 +1005,54 @@ int MultiHydro::findFreezeout(EoS* eosH)
        );*/
       }
      } else {
-      if (dEtotSurf[0] > 0 && dVEff_p > 0) printFreezeout(
-       fmhfreeze_p,
+      if (dEtotSurf[0] > 0 && dVEff_p > 0) {
+       printFreezeout(fmhfreeze_p,
        h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0),
        f_p->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_p->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
        dsigma, uC_p, TCp, mubCp, muqCp, musCp, picart_p, PiC_p, dVEff_p
-      );
-      if (dEtotSurf[1] > 0 && dVEff_t > 0) printFreezeout(
-       fmhfreeze_t,
+       );
+       printBeta(fmhbeta_p,
+        h_p->getTau() - h_p->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_p->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_p->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_p->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_p, TCp, mubCp, muqCp, musCp, dbetaCart_p
+       );
+      }
+      if (dEtotSurf[1] > 0 && dVEff_t > 0) {
+       printFreezeout(fmhfreeze_t,
        h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
        f_t->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_t->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
        dsigma, uC_t, TCt, mubCt, muqCt, musCt, picart_t, PiC_t, dVEff_t
-      );
-      if (dEtotSurf[2] > 0 && dVEff_f > 0) printFreezeout(
-       fmhfreeze_f,
+       );
+       printBeta(fmhbeta_t,
+        h_t->getTau() - h_t->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_t->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_t->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_t->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_t, TCt, mubCt, muqCt, musCt, dbetaCart_t
+       );
+      }
+      if (dEtotSurf[2] > 0 && dVEff_f > 0) {
+       printFreezeout(fmhfreeze_f,
        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
        f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
        f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
        f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
        dsigma, uC_f, TCf, mubCf, muqCf, musCf, picart_f, PiC_f, dVEff_f
-      );
+       );
+       printBeta(fmhbeta_f,
+        h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
+        f_f->getX(ix) + cornelius->get_centroid_elem(isegm, 1),
+        f_f->getY(iy) + cornelius->get_centroid_elem(isegm, 2),
+        f_f->getZ(iz) + cornelius->get_centroid_elem(isegm, 3),
+        dsigma, uC_f, TCf, mubCf, muqCf, musCf, dbetaCart_f
+       );
+      }
       /*if (dEtotSurf[2] > 0 && dVEff > 0) printFreezeout(
         fmhfreeze_all,
         h_f->getTau() - h_f->getDtau() + cornelius->get_centroid_elem(isegm, 0),
@@ -1019,6 +1106,25 @@ void MultiHydro::printFreezeout(std::ofstream &fout, double t, double x, double 
 #else
  fout << setw(24) << dVEff;
 #endif
+ fout << endl;
+}
+
+void MultiHydro::printBeta(std::ofstream &fout, double t, double x, double y, double z, double dsigma[4], double uC[4], double TC, double mub, double muq, double mus, double dbetaCart[4][4])
+{
+ fout.precision(15);
+ fout << setw(24) << t << setw(24) << x << setw(24) << y << setw(24) << z;
+ for (int ii = 0; ii < 4; ii++) {
+  fout << setw(24) << dsigma[ii];
+ }
+ for (int ii = 0; ii < 4; ii++) {
+  fout << setw(24) << uC[ii];
+ }
+ fout << setw(24) << TC << setw(24) << mub << setw(24) << muq << setw(24) << mus;
+
+ for(int i = 0; i < 4; i++)
+  for(int j = 0; j < 4; j++)
+  fout << setw(24) << dbetaCart[i][j];
+
  fout << endl;
 }
 

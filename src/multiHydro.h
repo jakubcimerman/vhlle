@@ -16,6 +16,7 @@ class MultiHydro {
  TransportCoeff *trcoeff;
  CrossSections *xsect;
  std::ofstream fmhfreeze_p, fmhfreeze_f, fmhfreeze_t, fmhfreeze_all;
+ std::ofstream fmhbeta_p, fmhbeta_f, fmhbeta_t;
  double ***MHeps, ***MHepsPrev;
  std::vector<std::vector<double>> retardedFriction;
  double ecrit, vEff, vEff_p, vEff_t, vEff_f;
@@ -47,6 +48,7 @@ public:
  void updateEnergyDensity();
  int  findFreezeout(EoS *eosH);
  void printFreezeout(std::ofstream &fout, double t, double x, double y, double z, double dsigma[4], double uC[4], double TC, double mub, double muq, double mus, double picart[10], double PiC, double dVEff);
+ void printBeta(std::ofstream &fout, double t, double x, double y, double z, double dsigma[4], double uC[4], double TC, double mub, double muq, double mus, double dbetaCart[4][4]);
  void outputEnergyDensity();
  void resizeMHeps();
  void setFluids(Fluid *f_p, Fluid *f_t, Fluid *f_f, Hydro *h_p, Hydro *h_t,

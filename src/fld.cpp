@@ -144,6 +144,9 @@ void Fluid::initOutput(const char *dir, double tau0, char *suffix) {
  string outfreeze = dir;
  outfreeze.append("/freezeout");
  outfreeze.append(suff);
+ string outbeta = dir;
+ outbeta.append("/beta");
+ outbeta.append(suff);
  fx.open(outx.c_str());
  fy.open(outy.c_str());
  fz.open(outz.c_str());
@@ -154,6 +157,7 @@ void Fluid::initOutput(const char *dir, double tau0, char *suffix) {
  fdiagvisc.open(outdiagvisc.c_str());
  faniz.open(outaniz.c_str());
  ffreeze.open(outfreeze.c_str());
+ fbeta.open(outbeta.c_str());
  //################################################################
  // important remark. for correct diagonal output, nx=ny must hold.
  //################################################################
@@ -549,6 +553,7 @@ void Fluid::outputSurface(double tau) {
     //----- Cornelius stuff
     double QCube[2][2][2][2][7];
     double piSquare[2][2][2][10], PiSquare[2][2][2];
+        double dbetaSq [2][2][2][4][4];
     for (int jx = 0; jx < 2; jx++)
      for (int jy = 0; jy < 2; jy++)
       for (int jz = 0; jz < 2; jz++) {
@@ -564,6 +569,9 @@ void Fluid::outputSurface(double tau) {
        for (int ii = 0; ii < 4; ii++)
         for (int jj = 0; jj <= ii; jj++)
          piSquare[jx][jy][jz][index44(ii, jj)] = cc->getpi(ii, jj);
+          for (int i=0; i<4; i++)
+           for (int j=0; j<4; j++)
+            dbetaSq[jx][jy][jz][i][j] = cc->getDbeta(i,j);
        PiSquare[jx][jy][jz] = cc->getPi();
       }
     cornelius->find_surface_4d(ccube);
@@ -572,6 +580,11 @@ void Fluid::outputSurface(double tau) {
      nelements++;
      ffreeze.precision(15);
      ffreeze << setw(24) << tau + cornelius->get_centroid_elem(isegm, 0)
+             << setw(24) << getX(ix) + cornelius->get_centroid_elem(isegm, 1)
+             << setw(24) << getY(iy) + cornelius->get_centroid_elem(isegm, 2)
+             << setw(24) << getZ(iz) + cornelius->get_centroid_elem(isegm, 3);
+     fbeta.precision(15);
+     fbeta << setw(24) << tau + cornelius->get_centroid_elem(isegm, 0)
              << setw(24) << getX(ix) + cornelius->get_centroid_elem(isegm, 1)
              << setw(24) << getY(iy) + cornelius->get_centroid_elem(isegm, 2)
              << setw(24) << getZ(iz) + cornelius->get_centroid_elem(isegm, 3);
@@ -607,6 +620,7 @@ void Fluid::outputSurface(double tau) {
       //cout << "#### Error (surface): high T/mu_b (T=" << TC << "/mu_b=" << mubC << ") ####\n";
      }
      if (eC > ecrit * 2.0 || eC < ecrit * 0.5) nsusp++;
+     double dbetaC [4][4] = {0.};
      for (int jx = 0; jx < 2; jx++)
       for (int jy = 0; jy < 2; jy++)
        for (int jz = 0; jz < 2; jz++) {
@@ -614,6 +628,9 @@ void Fluid::outputSurface(double tau) {
          piC[ii] +=
              piSquare[jx][jy][jz][ii] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
         PiC += PiSquare[jx][jy][jz] * wCenX[jx] * wCenY[jy] * wCenZ[jz];
+         for(int i=0; i<4; i++)
+          for(int j=0; j<4; j++)
+           dbetaC[i][j] += dbetaSq[jx][jy][jz][i][j]*wCenX[jx]*wCenY[jy]*wCenZ[jz];
        }
      double v2C = vxC * vxC + vyC * vyC + vzC * vzC;
      if (v2C > 1.) {
@@ -646,6 +663,10 @@ void Fluid::outputSurface(double tau) {
      for (int ii = 0; ii < 4; ii++) ffreeze << setw(24) << uC[ii];
      ffreeze << setw(24) << TC << setw(24) << mubC << setw(24) << muqC
              << setw(24) << musC;
+     for (int ii = 0; ii < 4; ii++) fbeta << setw(24) << dsigma[ii];
+     for (int ii = 0; ii < 4; ii++) fbeta << setw(24) << uC[ii];
+     fbeta << setw(24) << TC << setw(24) << mubC << setw(24) << muqC
+             << setw(24) << musC;
 #ifdef OUTPI
      double picart[10];
      /*pi00*/ picart[index44(0, 0)] = ch * ch * piC[index44(0, 0)] +
@@ -673,6 +694,21 @@ void Fluid::outputSurface(double tau) {
 #else
      ffreeze << setw(24) << dVEff << endl;
 #endif
+          const double jacob [4][4] =
+          {{ch, 0., 0., -sh}, {0., 1., 0., 0.}, {0., 0., 1., 0.},
+           {-sh, 0., 0., ch}}; // Jacobian to transform covariant (lower index)
+           // vector from Milne to Cartesian coordinate system
+          double dbetaCart [4][4] = {0};
+          for(int i=0; i<4; i++)
+          for(int j=0; j<4; j++)
+          for(int k=0; k<4; k++)
+          for(int l=0; l<4; l++)
+           dbetaCart [i][j] += jacob[i][k] * jacob[j][l] * dbetaC[k][l]
+                               * gmumu[l]; // which equals to d_i beta_j
+          for(int i=0; i<4; i++)
+          for(int j=0; j<4; j++)
+           fbeta << setw(24) << dbetaCart[i][j];
+          fbeta << endl;
      double dEsurfVisc = 0.;
      for (int i = 0; i < 4; i++)
       dEsurfVisc += picart[index44(0, i)] * dsigma[i];

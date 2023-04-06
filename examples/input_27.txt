@@ -1,7 +1,7 @@
-nevents 1
+nevents 200
 snn   27
-b_min  0.0
-b_max  12.0
+b_min  6.46
+b_max  10.31
 projA  197
 targA  197
 projZ  79
@@ -11,7 +11,7 @@ targZ  79
 eosType       1
 eosTypeHadron 1
 
-etaS      0.0
+etaS      0.00001
 zetaS     0.0
 e_crit    0.5
 

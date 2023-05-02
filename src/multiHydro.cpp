@@ -212,16 +212,16 @@ void MultiHydro::frictionSubstep()
     double nquark_t = 18 * zeta3 * pow(TCt, 3) / pow(M_PI, 2) + 2*pow(mubCt/3, 3);
     double ngluon_t = 16 * zeta3 * pow(TCt, 3) / pow(M_PI, 2);
     double dens_p, dens_t;
-    if (ep < 0.7) {
+    //if (ep < 0.7) {
      dens_p = xi_h*pow(2*mN/sqrt(s), 0.5)*nbp;
-    } else {
+    /*} else {
      dens_p = xi_q*pow(2*mN/sqrt(s), 0.5)*(nquark_p+ngluon_p)/3;
-    }
-    if (et < 0.7) {
+    }*/
+    //if (et < 0.7) {
      dens_t = xi_h*pow(2*mN/sqrt(s), 0.5)*nbt;
-    } else {
+    /*} else {
      dens_t = xi_q*pow(2*mN/sqrt(s), 0.5)*(nquark_t+ngluon_t)/3;
-    }
+    }*/
     //double sigma_gg = 0.3; // fm^2
     //double D_QGP = mN*Vrel*sigma_gg;
     upLV.Boost(-vxt, -vyt, -vzt);

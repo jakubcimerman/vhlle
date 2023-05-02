@@ -13,7 +13,7 @@
 
 using namespace std;
 
-IC3F::IC3F(Fluid *f_p, Fluid *f_t, int _nevents, double _snn, double _b_min, double _b_max, int _projA, int _targA, int _projZ, int _targZ, double _Rg, double _tau0) {
+IC3F::IC3F(Fluid *f_p, Fluid *f_t, int _nevents, double _snn, double _b_min, double _b_max, int _projA, int _targA, int _projZ, int _targZ, double _Rg, double _tau0, EoS* eos) {
  nx = f_p->getNX();
  ny = f_p->getNY();
  nz = f_p->getNZ();
@@ -41,8 +41,8 @@ IC3F::IC3F(Fluid *f_p, Fluid *f_t, int _nevents, double _snn, double _b_min, dou
  const double rap_beam = 0.5 * log((1 + vcoll) / (1-vcoll)); // beam rapidity
  const double Rproj = 1.1 * pow(projA, 0.333) - 0.656 * pow(projA, -0.333); // projectile nucleus radius
  const double Rtarg = 1.1 * pow(targA, 0.333) - 0.656 * pow(targA, -0.333); // target nucleus radius
- const double z0_proj = - 2 * Rproj / gamma;
- const double z0_targ = 2 * Rtarg / gamma;
+ const double z0_proj = - (Rproj + 2 * WSdelta) / gamma;
+ const double z0_targ = (Rtarg + 2 * WSdelta) / gamma;
  tau0 = _tau0;
  Rgx = _Rg;
  Rgy = _Rg;
@@ -107,74 +107,186 @@ IC3F::IC3F(Fluid *f_p, Fluid *f_t, int _nevents, double _snn, double _b_min, dou
  uniform_real_distribution<> dis_targ(- Rtarg - 4.0, Rtarg + 4.0);
  uniform_real_distribution<> dis_uniform(0.0, 1.0);
 
- for (int iev = 0; iev < nevents; iev++) {
-  // generating impact parameter
-  bool generated = false;
-  double bx, by, b;
-  if (b_max > Rproj + Rtarg) b_max = Rproj + Rtarg;
-  if (b_min < 0) b_min = 0;
-  if (b_min > b_max) {
-   cout << "b_min has to be smaller than b_max" << endl;
-   exit(1);
-  }
-  if (b_min == b_max) {
-   b = b_min;
-   generated = true;
-  }
-  uniform_real_distribution<> dis_impact(- b_max, b_max);
-  while (!generated) {
-   bx = dis_impact(gen);
-   by = dis_impact(gen);
-   b = sqrt(bx*bx + by*by);
-   if (b < b_max && b > b_min) generated = true;
-  }
+ if (nevents < 0) {
+  cout << "nevents has to be positive" << endl;
+  exit(1);
+ } else if (nevents == 0) {
+  double ep_norm = 0, nbp_norm = 0, nqp_norm = 0;
+  double et_norm = 0, nbt_norm = 0, nqt_norm = 0;
+  for (int ix = 0; ix < f_p->getNX(); ix++)
+   for (int iy = 0; iy < f_p->getNY(); iy++)
+    for (int iz = 0; iz < f_p->getNZ(); iz++) {
+     if (b_max != b_min)
+      cout << "symmetric initial state does not generate random impact parameter, value b_min is used" << endl;
+     double b = b_min;
+     double x = f_p->getX(ix);
+     double y = f_p->getY(iy);
+     double eta = f_p->getZ(iz);
+     double z_p = tau0 * (sinh(eta - rap_beam) + sinh(rap_beam)) / (cosh(rap_beam));
+     double z_t = tau0 * (sinh(eta + rap_beam) - sinh(rap_beam)) / (cosh(rap_beam));
 
-  cout << "generated impact parameter: " << b << endl;
+     double r_p = sqrt((x - b/2) * (x - b/2) + y * y + gamma * gamma * (z_p - z0_proj) * (z_p - z0_proj));
+     double r_t = sqrt((x + b/2) * (x + b/2) + y * y + gamma * gamma * (z_t - z0_targ) * (z_t - z0_targ));
 
-  // output for debugging
-  //ofstream fout("nucleons.dat");
-  std::vector<Nucleon> nucl1;
-  nucleons.push_back(nucl1);
-  nucleons[iev].clear();
+     // calculate energy-momentum tensor and charges in Cartesian frame at ix,iy,iz
+     double ep = 0.17 * nucleon_mass / (1 + exp((r_p - Rproj) / WSdelta));
+     double et = 0.17 * nucleon_mass / (1 + exp((r_t - Rtarg) / WSdelta));
+     double nbp = ep / nucleon_mass;
+     double nbt = et / nucleon_mass;
+     double nqp = nbp * projZ / projA;
+     double nqt = nbt * targZ / targA;
+     double pp = eos->p(ep, nbp, 0, nqp);
+     double pt = eos->p(et, nbt, 0, nqt);
 
-  // generating nucleons of projectile nucleus
-  for (int i = 0; i < projA; i++) {
-   generated = false;
-   double x, y, z, r;
-   while (!generated) {
-    x = dis_proj(gen);
-    y = dis_proj(gen);
-    z = dis_proj(gen);
-    r = sqrt(x*x + y*y + z*z);
-    if (dis_uniform(gen) < 1/(1 + exp((r - Rproj) / WSdelta))) generated = true;
+     double Ttt_p = (ep + pp) * gamma * gamma - pp;
+     double Ttz_p = (ep + pp) * gamma * gamma * vcoll;
+     double Tzz_p = (ep + pp) * gamma * gamma * vcoll * vcoll + pp;
+     double Ttt_t = (et + pt) * gamma * gamma - pt;
+     double Ttz_t = (et + pt) * gamma * gamma * (-vcoll);
+     double Tzz_t = (et + pt) * gamma * gamma * vcoll * vcoll + pt;
+     double Nbt_p = nbp * gamma;
+     double Nbz_p = nbp * gamma * vcoll;
+     double Nbt_t = nbt * gamma;
+     double Nbz_t = nbt * gamma * (-vcoll);
+     double Nqt_p = nqp * gamma;
+     double Nqz_p = nqp * gamma * vcoll;
+     double Nqt_t = nqt * gamma;
+     double Nqz_t = nqt * gamma * (-vcoll);
+
+     // transform energy-momentum tensor and charges to hyperbolic frame
+     double z = tau0 * sinh(eta);
+     double t = tau0 * cosh(eta);
+     T00_p[ix][iy][iz] = (t*t*Ttt_p - 2*z*t*Ttz_p + z*z*Tzz_p)/pow(tau0,2);
+     T00_t[ix][iy][iz] = (t*t*Ttt_t - 2*z*t*Ttz_t + z*z*Tzz_t)/pow(tau0,2);
+     T0z_p[ix][iy][iz] = (-z*t*Ttt_p + (t*t+z*z)*Ttz_p - z*t*Tzz_p)/pow(tau0,2);
+     T0z_t[ix][iy][iz] = (-z*t*Ttt_t + (t*t+z*z)*Ttz_t - z*t*Tzz_t)/pow(tau0,2);
+     QB_p[ix][iy][iz] = (t*Nbt_p - z*Nbz_p) / tau0;
+     QB_t[ix][iy][iz] = (t*Nbt_t - z*Nbz_t) / tau0;
+     QE_p[ix][iy][iz] = (t*Nqt_p - z*Nqz_p) / tau0;
+     QE_t[ix][iy][iz] = (t*Nqt_t - z*Nqz_t) / tau0;
+
+     // calculate normalization factors
+     double nsp, vxp, vyp, vzp, mubp, muqp, musp, tp;
+     double nst, vxt, vyt, vzt, mubt, muqt, must, tt;
+     double Qp[7] = {T00_p[ix][iy][iz], 0, 0, T0z_p[ix][iy][iz], QB_p[ix][iy][iz], QE_p[ix][iy][iz], 0};
+     double Qt[7] = {T00_t[ix][iy][iz], 0, 0, T0z_t[ix][iy][iz], QB_t[ix][iy][iz], QE_t[ix][iy][iz], 0};
+     transformPV(eos, Qp, ep, pp, nbp, nqp, nsp, vxp, vyp, vzp);
+     transformPV(eos, Qt, et, pt, nbt, nqt, nst, vxt, vyt, vzt);
+     vzp = eta + 1. / 2. * log((1. + vzp) / (1. - vzp));
+     vxp = vxp * cosh(vzp - eta) / cosh(vzp);
+     vyp = vyp * cosh(vzp - eta) / cosh(vzp);
+     vzt = eta + 1. / 2. * log((1. + vzt) / (1. - vzt));
+     vxt = vxt * cosh(vzt - eta) / cosh(vzt);
+     vyt = vyt * cosh(vzt - eta) / cosh(vzt);
+     eos->eos(ep, nbp, nqp, nsp, tp, mubp, muqp, musp, pp);
+     eos->eos(et, nbt, nqt, nst, tt, mubt, muqt, must, pt);
+     const double cosh_int = (sinh(eta + 0.5 * dz) - sinh(eta - 0.5 * dz)) / dz;
+     const double sinh_int = (cosh(eta + 0.5 * dz) - cosh(eta - 0.5 * dz)) / dz;
+     ep_norm += tau0 * (ep + pp) / (1. - vxp * vxp - vyp * vyp - tanh(vzp) * tanh(vzp)) *
+             (cosh_int - tanh(vzp) * sinh_int) -
+         tau0 * pp * cosh_int;
+     et_norm += tau0 * (et + pt) / (1. - vxt * vxt - vyt * vyt - tanh(vzt) * tanh(vzt)) *
+             (cosh_int - tanh(vzt) * sinh_int) -
+         tau0 * pt * cosh_int;
+     nbp_norm += QB_p[ix][iy][iz];
+     nbt_norm += QB_t[ix][iy][iz];
+     nqp_norm += QE_p[ix][iy][iz];
+     nqt_norm += QE_t[ix][iy][iz];
+  }
+  ep_norm *= dx * dy * dz;
+  et_norm *= dx * dy * dz;
+  nbp_norm *= tau0 * dx * dy * dz;
+  nbt_norm *= tau0 * dx * dy * dz;
+  nqp_norm *= tau0 * dx * dy * dz;
+  nqt_norm *= tau0 * dx * dy * dz;
+
+  // normalize to E=sqrt(sNN)*A/2, Nb=A, Nq=Z
+  cout << ep_norm << " " << nbp_norm << " " << nqp_norm << endl;
+  cout << et_norm << " " << nbt_norm << " " << nqt_norm << endl;
+  double norm_p = 0;
+  double norm_t = 0;
+  for (int ix = 0; ix < f_p->getNX(); ix++)
+   for (int iy = 0; iy < f_p->getNY(); iy++)
+    for (int iz = 0; iz < f_p->getNZ(); iz++) {
+     QB_p[ix][iy][iz] *= projA / nbp_norm;
+     QB_t[ix][iy][iz] *= targA / nbt_norm;
+     QE_p[ix][iy][iz] *= projZ / nqp_norm;
+     QE_t[ix][iy][iz] *= targZ / nqt_norm;
+     T00_p[ix][iy][iz] *= snn * projA / (2 * ep_norm);
+     T00_t[ix][iy][iz] *= snn * targA / (2 * et_norm);
+     T0z_p[ix][iy][iz] *= snn * projA / (2 * ep_norm);
+     T0z_t[ix][iy][iz] *= snn * targA / (2 * et_norm);
+  }
+ } else {
+  for (int iev = 0; iev < nevents; iev++) {
+   // generating impact parameter
+   bool generated = false;
+   double bx, by, b;
+   if (b_max > Rproj + Rtarg) b_max = Rproj + Rtarg;
+   if (b_min < 0) b_min = 0;
+   if (b_min > b_max) {
+    cout << "b_min has to be smaller than b_max" << endl;
+    exit(1);
    }
-   x += b / 2;
-   z = z / gamma + z0_proj;
-   double eta = asinh(z * cosh(rap_beam) / tau0 - sinh(rap_beam)) + rap_beam;
-   int charge = i < projZ ? 1 : 0;
-   nucleons[iev].push_back(Nucleon(x, y, eta, rap_beam, charge));
-   makeSmoothPart(x, y, eta, charge, rap_beam, true);
-   //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
-  }
-
-  // generating nucleons of target nucleus
-  for (int i = 0; i < targA; i++) {
-   generated = false;
-   double x, y, z, r;
-   while (!generated) {
-    x = dis_targ(gen);
-    y = dis_targ(gen);
-    z = dis_targ(gen);
-    r = sqrt(x*x + y*y + z*z);
-    if (dis_uniform(gen) < 1/(1 + exp((r - Rtarg) / WSdelta))) generated = true;
+   if (b_min == b_max) {
+    b = b_min;
+    generated = true;
    }
-   x -= b / 2;
-   z = z / gamma + z0_targ;
-   double eta = asinh(z * cosh(rap_beam) / tau0 + sinh(rap_beam)) - rap_beam;
-   int charge = i < targZ ? 1 : 0;
-   nucleons[iev].push_back(Nucleon(x, y, eta, -rap_beam, charge));
-   makeSmoothPart(x, y, eta, charge, -rap_beam, false);
-   //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
+   uniform_real_distribution<> dis_impact(- b_max, b_max);
+   while (!generated) {
+    bx = dis_impact(gen);
+    by = dis_impact(gen);
+    b = sqrt(bx*bx + by*by);
+    if (b < b_max && b > b_min) generated = true;
+   }
+
+   cout << "generated impact parameter: " << b << endl;
+
+   // output for debugging
+   //ofstream fout("nucleons.dat");
+   std::vector<Nucleon> nucl1;
+   nucleons.push_back(nucl1);
+   nucleons[iev].clear();
+
+   // generating nucleons of projectile nucleus
+   for (int i = 0; i < projA; i++) {
+    generated = false;
+    double x, y, z, r;
+    while (!generated) {
+     x = dis_proj(gen);
+     y = dis_proj(gen);
+     z = dis_proj(gen);
+     r = sqrt(x*x + y*y + z*z);
+     if (dis_uniform(gen) < 1/(1 + exp((r - Rproj) / WSdelta))) generated = true;
+    }
+    x += b / 2;
+    z = z / gamma + z0_proj;
+    double eta = asinh(z * cosh(rap_beam) / tau0 - sinh(rap_beam)) + rap_beam;
+    int charge = i < projZ ? 1 : 0;
+    nucleons[iev].push_back(Nucleon(x, y, eta, rap_beam, charge));
+    makeSmoothPart(x, y, eta, charge, rap_beam, true);
+    //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
+   }
+
+   // generating nucleons of target nucleus
+   for (int i = 0; i < targA; i++) {
+    generated = false;
+    double x, y, z, r;
+    while (!generated) {
+     x = dis_targ(gen);
+     y = dis_targ(gen);
+     z = dis_targ(gen);
+     r = sqrt(x*x + y*y + z*z);
+     if (dis_uniform(gen) < 1/(1 + exp((r - Rtarg) / WSdelta))) generated = true;
+    }
+    x -= b / 2;
+    z = z / gamma + z0_targ;
+    double eta = asinh(z * cosh(rap_beam) / tau0 + sinh(rap_beam)) - rap_beam;
+    int charge = i < targZ ? 1 : 0;
+    nucleons[iev].push_back(Nucleon(x, y, eta, -rap_beam, charge));
+    makeSmoothPart(x, y, eta, charge, -rap_beam, false);
+    //fout << x << " " << y << " " << z << " " << r << " " << eta << endl;
+   }
   }
  }
  //fout.close();
@@ -273,21 +385,39 @@ void IC3F::setIC(Fluid* f_p, Fluid* f_t, EoS* eos) {
  for (int ix = 0; ix < nx; ix++)
   for (int iy = 0; iy < ny; iy++)
    for (int iz = 0; iz < nz; iz++) {
-    Q_p[T_] = T00_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;  // /tau for Milne
-    Q_p[X_] = 0.0;
-    Q_p[Y_] = 0.0;
-    Q_p[Z_] = T0z_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_p[NB_] = QB_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_p[NQ_] = QE_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_p[NS_] = 0.0;
+    if (nevents == 0) {
+     Q_p[T_] = T00_p[ix][iy][iz];  // /tau for Milne
+     Q_p[X_] = 0.0;
+     Q_p[Y_] = 0.0;
+     Q_p[Z_] = T0z_p[ix][iy][iz];
+     Q_p[NB_] = QB_p[ix][iy][iz];
+     Q_p[NQ_] = QE_p[ix][iy][iz];
+     Q_p[NS_] = 0.0;
 
-    Q_t[T_] = T00_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;  // /tau for Milne
-    Q_t[X_] = 0.0;
-    Q_t[Y_] = 0.0;
-    Q_t[Z_] = T0z_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_t[NB_] = QB_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_t[NQ_] = QE_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
-    Q_t[NS_] = 0.0;
+     Q_t[T_] = T00_t[ix][iy][iz];  // /tau for Milne
+     Q_t[X_] = 0.0;
+     Q_t[Y_] = 0.0;
+     Q_t[Z_] = T0z_t[ix][iy][iz];
+     Q_t[NB_] = QB_t[ix][iy][iz];
+     Q_t[NQ_] = QE_t[ix][iy][iz];
+     Q_t[NS_] = 0.0;
+    } else {
+     Q_p[T_] = T00_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;  // /tau for Milne
+     Q_p[X_] = 0.0;
+     Q_p[Y_] = 0.0;
+     Q_p[Z_] = T0z_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_p[NB_] = QB_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_p[NQ_] = QE_p[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_p[NS_] = 0.0;
+
+     Q_t[T_] = T00_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;  // /tau for Milne
+     Q_t[X_] = 0.0;
+     Q_t[Y_] = 0.0;
+     Q_t[Z_] = T0z_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_t[NB_] = QB_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_t[NQ_] = QE_t[ix][iy][iz] / nevents / dx / dy / dz / tau0;
+     Q_t[NS_] = 0.0;
+    }
 
     transformPV(eos, Q_p, e_p, p_p, nb_p, nq_p, ns_p, vx_p, vy_p, vz_p);
     transformPV(eos, Q_t, e_t, p_t, nb_t, nq_t, ns_t, vx_t, vy_t, vz_t);

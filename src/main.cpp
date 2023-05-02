@@ -409,7 +409,7 @@ int main(int argc, char **argv) {
  cout << "IC done\n";
 */
 
- IC3F *ic = new IC3F(f_p, f_t, nevents, snn, b_min, b_max, projA, targA, projZ, targZ, Rgt, tau0);
+ IC3F *ic = new IC3F(f_p, f_t, nevents, snn, b_min, b_max, projA, targA, projZ, targZ, Rgt, tau0, eos);
  ic->setIC(f_p, f_t, eos);
  std::vector<std::vector<Nucleon>> nucleons = ic->getNucleons();
  delete ic;

@@ -163,7 +163,7 @@ EoSChiral::~EoSChiral() {
  delete eossmall;
 }
 
-void EoSChiral::eos(double e, double nb, double nq, double ns, double& T,
+void EoSChiral::eos_full(double e, double nb, double nq, double ns, double& T,
                     double& mub, double& muq, double& mus, double& p) {
  if (e < 1.46 && nb < 0.3)
   eossmall->get(e, nb, p, T, mub, mus);
@@ -177,11 +177,32 @@ void EoSChiral::eos(double e, double nb, double nq, double ns, double& T,
  muq = 0.0;  // generally it's not zero, but...but
 }
 
-double EoSChiral::p(double e, double nb, double nq, double ns) {
+void EoSChiral::eos(double e, double nb, double nq, double ns, double& T,
+                    double& mub, double& muq, double& mus, double& p) {
+ int loop_count = 0;
+ do {
+  eos_full(e, nb, nq, ns, T, mub, muq, mus, p);
+  nb = 0.7*nb;
+  loop_count++;
+ } while(e>0. && p<0.0001*e && loop_count<10);
+}
+
+double EoSChiral::p_full(double e, double nb, double nq, double ns) {
  if (e < 1.46 && nb < 0.3)
   return eossmall->p(e, nb);
  else if (e < 146. && nb < 6.)
   return eosbig->p(e, nb);
  else
   return 0.2964 * e;
+}
+
+double EoSChiral::p(double e, double nb, double nq, double ns) {
+ int loop_count = 0;
+ double p = 0.;
+ do {
+  p = p_full(e, nb, nq, ns);
+  nb = 0.7*nb;
+  loop_count++;
+ } while(e>0. && p<0.0001*e && loop_count<10);
+ return p;
 }

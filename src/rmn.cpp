@@ -26,7 +26,7 @@ void handler(int sig) {
 }
 
 void transformPV(EoS *eos, double Q[7], double &e, double &p, double &nb,
-                 double &nq, double &ns, double &vx, double &vy, double &vz) {
+                 double &nq, double &ns, double &vx, double &vy, double &vz, bool print_error) {
  // conserved -> primitive transtormation requires
  // a numerical solution to 1D nonlinear algebraic equation:
  // v = M / ( Q_t + p(Q_t-M*v, n) )       (A.2)
@@ -108,7 +108,7 @@ void transformPV(EoS *eos, double Q[7], double &e, double &p, double &nb,
    vh = v;
   else
    vl = v;
-  if (nb != nb)
+  if (nb != nb && print_error)
    cout << "transformCV:nbInf " << i << "  " << e << "  " << nb << "  " << nq
         << "  " << ns << "  " << p << "  " << v << endl;
   if (debugRiemann)
@@ -127,12 +127,12 @@ void transformPV(EoS *eos, double Q[7], double &e, double &p, double &nb,
  nb = Q[NB_] * sqrt(1 - vx * vx - vy * vy - vz * vz);
  nq = Q[NQ_] * sqrt(1 - vx * vx - vy * vy - vz * vz);
  ns = Q[NS_] * sqrt(1 - vx * vx - vy * vy - vz * vz);
- if (e < 0. || sqrt(vx * vx + vy * vy + vz * vz) > 1.) {
+ if ((e < 0. || sqrt(vx * vx + vy * vy + vz * vz) > 1.) && print_error) {
   cout << Q[T_] << "  " << Q[X_] << "  " << Q[Y_] << "  " << Q[Z_] << "  "
        << Q[NB_] << endl;
   cout << "transformRF::Error\n";
  }
- if (!(nb < 0. || nb >= 0.)) {
+ if (!(nb < 0. || nb >= 0.) && print_error ) {
   cout << "transformRF::Error nb=#ind\n";
   //  return ;
  }

@@ -6,7 +6,7 @@
 // output: energy density e, pressure p, charge densities nb, nq, ns
 // 3-velocity components vx, vy, vz
 void transformPV(EoS *eos, double Q[7], double &e, double &p, double &nb,
-                 double &nq, double &ns, double &vx, double &vy, double &vz);
+                 double &nq, double &ns, double &vx, double &vy, double &vz, bool print_error=true);
 
 // the same, except that known bulk pressure Pi is taken into account
 void transformPVBulk(EoS *eos, double Pi, double Q[7], double &e, double &p,

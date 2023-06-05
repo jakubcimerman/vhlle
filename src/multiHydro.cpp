@@ -297,9 +297,9 @@ void MultiHydro::frictionSubstep()
     Q_f_new[i]=_Q_f[i]+(flux_f[i]-flux_pf[i]-flux_tf[i])*tauf;
    }
    double e_p_new, e_t_new, e_f_new, nb_p_new, nb_t_new, nb_f_new, p_new, nq_new, ns_new, vx_new, vy_new, vz_new;
-   transformPV(eos,Q_p_new,e_p_new,p_new,nb_p_new,nq_new,ns_new,vx_new,vy_new,vz_new);
-   transformPV(eos,Q_t_new,e_t_new,p_new,nb_t_new,nq_new,ns_new,vx_new,vy_new,vz_new);
-   transformPV(eos,Q_f_new,e_f_new,p_new,nb_f_new,nq_new,ns_new,vx_new,vy_new,vz_new);
+   transformPV(eos,Q_p_new,e_p_new,p_new,nb_p_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
+   transformPV(eos,Q_t_new,e_t_new,p_new,nb_t_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
+   transformPV(eos,Q_f_new,e_f_new,p_new,nb_f_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
    // compute largest relative change to e-mN*nb across the fluids
    double friction_rel=max((ep-e_p_new-mN*nb_p_new)/(ep-mN*nb_p_new),
                         max((et-e_t_new-mN*nb_t_new)/(et-mN*nb_t_new),

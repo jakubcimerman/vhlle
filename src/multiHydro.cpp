@@ -147,8 +147,6 @@ void MultiHydro::performStep()
 
 void MultiHydro::frictionSubstep()
 {
- const double mN = 0.94; // nucleon mass [GeV]
- const double mpi = 0.1396; // pion mass [GeV]
  // here it is assumed that projectile and target grids
  // have same dimensions and physical sizes
  for (int iy = 0; iy < f_p->getNY(); iy++)
@@ -288,12 +286,37 @@ void MultiHydro::frictionSubstep()
    double taup = h_p->getTau();
    double taut = h_t->getTau();
    double tauf = h_f->getTau();
-   double _Q_p[7], _Q_t[7], _Q_f[7];
+   // check thermodynamic variables of cell after update
+   double _Q_p[7], _Q_t[7], _Q_f[7], Q_p_new[7]={0}, Q_t_new[7]={0}, Q_f_new[7]={0};
    c_p->getQ(_Q_p);
    c_t->getQ(_Q_t);
    c_f->getQ(_Q_f);
-   if (_Q_p[0] + (flux_p[0]+flux_pf[0])*taup >= 0.2*_Q_p[0] &&
-       _Q_t[0] + (flux_t[0]+flux_tf[0])*taut >= 0.2*_Q_t[0] &&
+   for(int i=0;i<4;i++){
+    Q_p_new[i]=_Q_p[i]+(flux_p[i]+flux_pf[i])*taup;
+    Q_t_new[i]=_Q_t[i]+(flux_t[i]+flux_tf[i])*taut;
+    Q_f_new[i]=_Q_f[i]+(flux_f[i]-flux_pf[i]-flux_tf[i])*tauf;
+   }
+   double e_p_new, e_t_new, e_f_new, nb_p_new, nb_t_new, nb_f_new, p_new, nq_new, ns_new, vx_new, vy_new, vz_new;
+   transformPV(eos,Q_p_new,e_p_new,p_new,nb_p_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
+   transformPV(eos,Q_t_new,e_t_new,p_new,nb_t_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
+   transformPV(eos,Q_f_new,e_f_new,p_new,nb_f_new,nq_new,ns_new,vx_new,vy_new,vz_new,false);
+   // compute largest relative change to e-mN*nb across the fluids
+   double friction_rel=max((ep-e_p_new-mN*nb_p_new)/(ep-mN*nb_p_new),
+                        max((et-e_t_new-mN*nb_t_new)/(et-mN*nb_t_new),
+                        (ef-e_f_new-mN*nb_f_new)/(ef-mN*nb_f_new)));
+   // overall rescaling factor for all friction terms:
+   // if friction_rel<<1, the factor is 1, but it smoothly transitions to a rescaling that
+   // will keep the relative change to e-mN*nb below the value specified by MaxRelFriction
+   double rescaling=pow(pow(friction_rel/MaxRelFriction,10.0)+1.0,-0.1);
+   for(int i=0;i<4;i++){
+    flux_f[i]*=rescaling;
+    flux_p[i]*=rescaling;
+    flux_t[i]*=rescaling;
+    flux_pf[i]*=rescaling;
+    flux_tf[i]*=rescaling;
+   }
+   if (_Q_p[0] + (flux_p[0]+flux_pf[0])*taup >= 0 &&
+       _Q_t[0] + (flux_t[0]+flux_tf[0])*taut >= 0 &&
        _Q_f[0] + (-flux_pf[0]-flux_tf[0]+flux_f[0])*tauf >= 0) {
     c_p->addFlux((flux_p[0]+flux_pf[0])*taup, (flux_p[1]+flux_pf[1])*taup,
      (flux_p[2]+flux_pf[2])*taup, (flux_p[3]+flux_pf[3])*taup, 0., 0., 0.);
